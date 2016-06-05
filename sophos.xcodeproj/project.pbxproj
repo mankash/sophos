@@ -224,6 +224,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		311100E51D04BEC50083797F /* lmdb++.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "lmdb++.h"; sourceTree = "<group>"; };
 		314FE9A71CBED0EE0088352B /* medium_storage_sophos_client.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = medium_storage_sophos_client.cpp; sourceTree = "<group>"; };
 		314FE9A81CBED0EE0088352B /* medium_storage_sophos_client.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = medium_storage_sophos_client.hpp; sourceTree = "<group>"; };
 		315A5A531CB15D920026DBB3 /* client_main.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = client_main.cpp; sourceTree = "<group>"; };
@@ -342,6 +343,7 @@
 				6C9CBEBC1CABBEAD003B0185 /* sophos_client_runner.hpp */,
 				6C9CBEBE1CABBEBA003B0185 /* sophos_server_runner.cpp */,
 				6C9CBEBF1CABBEBA003B0185 /* sophos_server_runner.hpp */,
+				311100E51D04BEC50083797F /* lmdb++.h */,
 			);
 			path = src;
 			sourceTree = "<group>";
@@ -688,6 +690,7 @@
 					"-lprotobuf",
 					"-lpthread",
 					"-ldl",
+					"-llmdb",
 				);
 				SDKROOT = macosx;
 				WARNING_CFLAGS = "-Wall ";
@@ -734,6 +737,7 @@
 					"-lprotobuf",
 					"-lpthread",
 					"-ldl",
+					"-llmdb",
 				);
 				SDKROOT = macosx;
 				WARNING_CFLAGS = "-Wall ";

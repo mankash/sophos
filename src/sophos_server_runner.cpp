@@ -64,7 +64,8 @@ storage_path_(path), async_search_(true)
         
         pk_buf << pk_in.rdbuf();
 
-        server_.reset(new SophosServer(pairs_map_path, pk_buf.str()));
+//        server_.reset(new SophosServer(pairs_map_path, pk_buf.str()));
+        server_.reset(new SophosServer(storage_path_, pk_buf.str()));
     }else if (exists(storage_path_)){
         // there should be nothing else than a directory at path, but we found something  ...
         throw std::runtime_error(storage_path_ + ": not a directory");
@@ -109,9 +110,11 @@ grpc::Status SophosImpl::setup(grpc::ServerContext* context,
 
     try {
         logger::log(logger::INFO) << "Seting up with size " << message->setup_size() << std::endl;
-        server_.reset(new SophosServer(pairs_map_path, message->setup_size(), message->public_key()));
+//        server_.reset(new SophosServer(pairs_map_path, message->setup_size(), message->public_key()));
+        server_.reset(new SophosServer(storage_path_, message->setup_size(), message->public_key()));
     } catch (std::exception &e) {
         logger::log(logger::ERROR) << "Error when setting up the server's core" << std::endl;
+        logger::log(logger::ERROR) << "Exception raised: " << e.what() << std::endl;
         
         server_.reset();
         return grpc::Status(grpc::FAILED_PRECONDITION, "Unable to create the server's core. Error in libssdmap");
