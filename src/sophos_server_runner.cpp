@@ -40,6 +40,7 @@ namespace sse {
 
         const std::string SophosImpl::pk_file = "tdp_pk.key";
         const std::string SophosImpl::pairs_map_file = "pairs.dat";
+        const std::string SophosImpl::lmdb_dir = "lmdb.db";
 
 SophosImpl::SophosImpl(const std::string& path) :
 storage_path_(path), async_search_(true)
@@ -49,23 +50,29 @@ storage_path_(path), async_search_(true)
         
         std::string pk_path     = storage_path_ + "/" + pk_file;
         std::string pairs_map_path  = storage_path_ + "/" + pairs_map_file;
+        std::string lmdb_path  = storage_path_ + "/" + lmdb_dir;
 
         if (!is_file(pk_path)) {
             // error, the secret key file is not there
             throw std::runtime_error("Missing secret key file");
         }
-        if (!is_directory(pairs_map_path)) {
+//        if (!is_directory(pairs_map_path)) {
+//            // error, the token map data is not there
+//            throw std::runtime_error("Missing data");
+//        }
+
+        if (!is_directory(lmdb_path)) {
             // error, the token map data is not there
             throw std::runtime_error("Missing data");
         }
-        
+
         std::ifstream pk_in(pk_path.c_str());
         std::stringstream pk_buf;
         
         pk_buf << pk_in.rdbuf();
 
 //        server_.reset(new SophosServer(pairs_map_path, pk_buf.str()));
-        server_.reset(new SophosServer(storage_path_, pk_buf.str()));
+        server_.reset(new SophosServer(lmdb_path, pk_buf.str()));
     }else if (exists(storage_path_)){
         // there should be nothing else than a directory at path, but we found something  ...
         throw std::runtime_error(storage_path_ + ": not a directory");
@@ -102,16 +109,24 @@ grpc::Status SophosImpl::setup(grpc::ServerContext* context,
 
         return grpc::Status(grpc::PERMISSION_DENIED, "Unable to create the server's content directory");
     }
+
     
     // now, we have the directory, and we should be able to conclude the setup
     // however, the bucket_map constructor in SophosServer's constructor can raise an exception, so we need to take care of it
     
     std::string pairs_map_path  = storage_path_ + "/" + pairs_map_file;
+    std::string lmdb_path  = storage_path_ + "/" + lmdb_dir;
+
+    if (!create_directory(lmdb_path, (mode_t)0700)) {
+        logger::log(logger::ERROR) << "Error: Unable to create the server's lmdb directory" << std::endl;
+        
+        return grpc::Status(grpc::PERMISSION_DENIED, "Unable to create the server's lmdb directory");
+    }
 
     try {
         logger::log(logger::INFO) << "Seting up with size " << message->setup_size() << std::endl;
 //        server_.reset(new SophosServer(pairs_map_path, message->setup_size(), message->public_key()));
-        server_.reset(new SophosServer(storage_path_, message->setup_size(), message->public_key()));
+        server_.reset(new SophosServer(lmdb_path, message->setup_size(), message->public_key()));
     } catch (std::exception &e) {
         logger::log(logger::ERROR) << "Error when setting up the server's core" << std::endl;
         logger::log(logger::ERROR) << "Exception raised: " << e.what() << std::endl;

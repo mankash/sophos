@@ -72,6 +72,7 @@ namespace sophos {
     private:
         static const std::string pk_file;
         static const std::string pairs_map_file;
+        static const std::string lmdb_dir;
 
         std::unique_ptr<SophosServer> server_;
         std::string storage_path_;

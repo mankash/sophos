@@ -347,6 +347,9 @@ bool SophosClientRunner::load_inverted_index(const std::string& path)
         };
         
         parser.addCallbackList(add_list_callback);
+        
+        this->start_update_session();
+        
         parser.parse();
         
         pool.join();
@@ -354,6 +357,7 @@ bool SophosClientRunner::load_inverted_index(const std::string& path)
         
         wait_updates_completion();
         
+        this->end_update_session();
         return true;
     } catch (std::exception& e) {
         logger::log(logger::ERROR) << "\nFailed to load file " << path << " : " << e.what() << std::endl;

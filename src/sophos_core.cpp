@@ -116,6 +116,7 @@ SophosServer::SophosServer(const std::string& db_path, const std::string& tdp_pk
     edb_env_(lmdb::env::create()), edb_dbi_(NULL),
     public_tdp_(tdp_pk, 2*std::thread::hardware_concurrency())
 {
+    edb_env_.set_mapsize(1UL<<30);
     // open the environment
     edb_env_.open(db_path.c_str(), lmdb_env_flags__, lmdb_file_mode__);
     
@@ -129,6 +130,7 @@ SophosServer::SophosServer(const std::string& db_path, const size_t tm_setup_siz
     edb_env_(lmdb::env::create()), edb_dbi_(NULL),
     public_tdp_(tdp_pk, 2*std::thread::hardware_concurrency())
 {
+    edb_env_.set_mapsize(1UL<<30);
     edb_env_.open(db_path.c_str(), lmdb_env_flags__, lmdb_file_mode__);
 
     // open the database
@@ -137,11 +139,11 @@ SophosServer::SophosServer(const std::string& db_path, const size_t tm_setup_siz
     txn.commit();
 }
 
-    SophosServer::~SophosServer()
-    {
-        lmdb::dbi_close(edb_env_.handle(), edb_dbi_.handle());
-        edb_env_.close();
-    }
+SophosServer::~SophosServer()
+{
+    lmdb::dbi_close(edb_env_.handle(), edb_dbi_.handle());
+    edb_env_.close();
+}
     
 const std::string SophosServer::public_key() const
 {
