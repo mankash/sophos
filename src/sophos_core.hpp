@@ -26,7 +26,7 @@
 #include <fstream>
 #include <functional>
 
-#include "lmdb++.h"
+#include "lmdb_wrapper.hpp"
 
 #include <ssdmap/bucket_map.hpp>
 #include <sse/crypto/tdp.hpp>
@@ -99,8 +99,8 @@ private:
 
 class SophosServer {
 public:
-    static constexpr int lmdb_env_flags__ = MDB_WRITEMAP | MDB_NORDAHEAD;
-    static constexpr lmdb::mode lmdb_file_mode__ = 0644;
+//    static constexpr int lmdb_env_flags__ = MDB_WRITEMAP | MDB_NORDAHEAD;
+//    static constexpr lmdb::mode lmdb_file_mode__ = 0644;
     
     
     SophosServer(const std::string& db_path, const std::string& tdp_pk);
@@ -109,9 +109,6 @@ public:
     
     const std::string public_key() const;
     
-    lmdb::txn new_transaction() const;
-    lmdb::txn new_ro_transaction() const;
-
     std::list<index_type> search(const SearchRequest& req);
     void search_callback(const SearchRequest& req, std::function<void(index_type)> post_callback);
     
@@ -128,8 +125,7 @@ public:
     std::ostream& print_stats(std::ostream& out) const;
 private:
 //    ssdmap::bucket_map<update_token_type, index_type, TokenHasher> edb_;
-    lmdb::env edb_env_;
-    lmdb::dbi edb_dbi_;
+    LMDBWrapper edb_;
     
     sse::crypto::TdpMultPool public_tdp_;
     

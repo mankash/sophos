@@ -26,6 +26,7 @@
 
 #include <iostream>
 #include <fstream>
+#include <algorithm>
 
 namespace sse {
 namespace sophos {
@@ -76,29 +77,42 @@ namespace sophos {
     }
     
     LMDBWrapper::LMDBWrapper(const std::string& db_path, const size_t setup_size, const size_t key_size, const size_t data_size) :
-    env_(NULL), dbi_(0)
+    env_(NULL), dbi_(0), db_path_(db_path)
     {
         if (!is_directory(db_path)) {
             throw std::runtime_error(db_path + ": not a directory");
         }
         
         std::string lmdb_data_path = db_path + "/" + data_dir;
-        init_lmdb_struct(lmdb_data_path, lmdb_env_flags__, lmdb_file_mode__, true, &env_, &dbi_);
         
-        // set to the right size
-        current_edb_size_ = setup_size * (key_size + data_size);
-        mdb_env_set_mapsize(env_, current_edb_size_);
-        
-        std::string md_path = db_path + "/" + md_file;
-        
-        if (!write_metadata(md_path)) {
-            logger::log(logger::CRITICAL) << "Unable to write the database metadata." << std::endl;
-            exit(-1);
+        if (exists(lmdb_data_path)) {
+            throw std::runtime_error("File or directory already exists at " + lmdb_data_path);
+        }else{
+            if (!create_directory(lmdb_data_path, (mode_t)0700)) {
+                throw std::runtime_error(lmdb_data_path + ": unable to create directory");
+            }
+
+            init_lmdb_struct(lmdb_data_path, lmdb_env_flags__, lmdb_file_mode__, true, &env_, &dbi_);
+            
+            // set to the right size
+            current_edb_size_ = setup_size * (key_size + data_size);
+//            current_edb_size_ = 104857;
+//            current_edb_size_ = std::max<size_t>(current_edb_size_, 1024*1024);
+            
+            mdb_env_set_mapsize(env_, current_edb_size_);
+            
+            std::string md_path = db_path + "/" + md_file;
+            
+            if (!write_metadata(md_path)) {
+                logger::log(logger::CRITICAL) << "Unable to write the database metadata." << std::endl;
+                exit(-1);
+            }
         }
+        
     }
     
     LMDBWrapper::LMDBWrapper(const std::string& db_path) :
-    env_(NULL), dbi_(0)
+    env_(NULL), dbi_(0), db_path_(db_path)
     {
         if (!is_directory(db_path)) {
             throw std::runtime_error(db_path + ": not a directory");
@@ -120,12 +134,6 @@ namespace sophos {
         
         // set to the right size
         mdb_env_set_mapsize(env_, current_edb_size_);
-        
-        
-        if (!write_metadata(md_path)) {
-            logger::log(logger::CRITICAL) << "Unable to write the database metadata." << std::endl;
-            exit(-1);
-        }
     }
     
     LMDBWrapper::~LMDBWrapper()
@@ -169,7 +177,7 @@ namespace sophos {
         if (errc == MDB_MAP_FULL) {
             // abort the transaction
             mdb_txn_abort(txn);
-
+            txn = NULL;
             // resize
             resize();
 
@@ -184,15 +192,38 @@ namespace sophos {
 
             errc = ::mdb_put(txn, dbi(), const_cast<MDB_val*>(&key), const_cast<MDB_val*>(&val), 0);
 
-            if (errc != 0) {
+            if (errc != MDB_SUCCESS) {
                 logger::log(logger::CRITICAL) << "Unable to replay the transaction: "  << error_string(errc) << std::endl;
             }
-        }else{
-            logger::log(logger::ERROR) << "Error when during database put: " << error_string(errc) << std::endl;
+        }else if(errc != MDB_SUCCESS){
+            logger::log(logger::ERROR) << "Error during database put: " << error_string(errc) << std::endl;
         }
 
-
+        errc = mdb_txn_commit(txn);
+        
         return (errc == MDB_SUCCESS);
+    }
+
+    bool LMDBWrapper::resize()
+    {
+        // we need to resize the DB's map
+        logger::log(logger::INFO) << "Resizing the database" << std::endl;
+        
+        current_edb_size_ *= (1+edb_size_increase_step__);
+        // set the new size
+
+        int errc = mdb_env_set_mapsize(env_, current_edb_size_);
+        
+        if (errc != 0) {
+            logger::log(logger::CRITICAL) << "Error when resizing the database: " << error_string(errc) << std::endl;
+            
+            return false;
+        }
+        
+        std::string md_path = db_path_ + "/" + md_file;
+        return write_metadata(md_path);
+        
+        return true;
     }
 
 

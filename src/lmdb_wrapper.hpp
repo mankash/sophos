@@ -21,6 +21,9 @@
 
 #pragma once
 
+#ifndef __LMDB_WRAPPER__
+#define __LMDB_WRAPPER__
+
 #include "logger.hpp"
 
 #include <lmdb.h>      /* for MDB_*, mdb_*() */
@@ -49,14 +52,22 @@ namespace sophos {
         
         class Transaction;
         
-        Transaction ro_transaction() const;
-        Transaction rw_transaction();
+        inline Transaction ro_transaction() const;
+        inline Transaction rw_transaction();
         
         inline MDB_dbi dbi() const;
         
+        inline size_t entries() const;
+        
         bool resize();
         
-        inline bool put(const MDB_val& key, const MDB_val& val);
+        bool put(const MDB_val& key, const MDB_val& val);
+
+        template<size_t N, typename V>
+        inline bool put(const std::array<uint8_t, N>& key, const V& val);
+
+        template<size_t N_K, size_t N_V>
+        inline bool put(const std::array<uint8_t, N_K>& key, const std::array<uint8_t, N_V>& val);
 
         template<typename K, typename V>
             inline bool put(const K& key, const V& val);
@@ -69,6 +80,8 @@ namespace sophos {
         
         ::MDB_env *env_;
         ::MDB_dbi dbi_;
+        
+        std::string db_path_;
         
         size_t current_edb_size_;
         static constexpr float edb_size_increase_step__ = 0.2;
@@ -99,6 +112,8 @@ namespace sophos {
         template<typename V>
             inline bool get(const std::string& key, V& val) const;
         
+        template<size_t N, typename V>
+            bool get(const std::array<uint8_t, N>& key, V& val) const;
     private:
         const LMDBWrapper* wrapper_;
         MDB_txn *txn_;
@@ -150,8 +165,44 @@ namespace sophos {
         
         return put(k, v);
     }
-
     
+    template<size_t N, typename V>
+    inline bool LMDBWrapper::put(const std::array<uint8_t, N>& key, const V& val)
+    {
+        MDB_val k{N, const_cast<void*>(reinterpret_cast<const void*>(key.data()))};
+        typename std::remove_const<V>::type val_cpy(val);
+        MDB_val v{sizeof(V), &val_cpy};
+        
+        return put(k, v);
+    }
+    
+    template<size_t N_K, size_t N_V>
+    inline bool LMDBWrapper::put(const std::array<uint8_t, N_K>& key, const std::array<uint8_t, N_V>& val)
+    {
+        MDB_val k{N_K, const_cast<void*>(reinterpret_cast<const void*>(key.data()))};
+        MDB_val v{N_V, const_cast<void*>(reinterpret_cast<const void*>(val.data()))};
+        
+        return put(k, v);
+    }
+    
+    inline size_t LMDBWrapper::entries() const
+    {
+        MDB_txn *txn;
+        int errc = mdb_txn_begin(env_, NULL, MDB_RDONLY, &txn);
+        
+        if (errc != 0) {
+            logger::log(logger::CRITICAL) << "Unable to begin transaction: " << LMDBWrapper::error_string(errc) << std::endl;
+            
+            return 0;
+        }
+
+        MDB_stat stat;
+        mdb_stat(txn, dbi(), &stat);
+        mdb_txn_commit(txn);
+        
+        return stat.ms_entries;
+    }
+
     LMDBWrapper::Transaction::Transaction(const LMDBWrapper* w, MDB_txn *txn)
     : wrapper_(w), txn_(txn)
     {
@@ -203,7 +254,14 @@ namespace sophos {
         MDB_val k{sizeof(K), const_cast<void*>(&key)};
         return get(k, val);
     }
-    
+
+    template<size_t N, typename V>
+    bool LMDBWrapper::Transaction::get(const std::array<uint8_t, N>& key,
+                                       V& val) const {
+        MDB_val k{N, const_cast<void*>(reinterpret_cast<const void*>(key.data()))};
+        return get(k, val);
+    }
+
     template<typename V>
     bool LMDBWrapper::Transaction::get(const std::string& key,
                                        V& val) const {
@@ -212,3 +270,5 @@ namespace sophos {
     }
 }
 }
+
+#endif

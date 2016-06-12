@@ -113,41 +113,41 @@ void SophosClient::write_keys(const std::string& dir_path) const
 }
     
 SophosServer::SophosServer(const std::string& db_path, const std::string& tdp_pk) :
-    edb_env_(lmdb::env::create()), edb_dbi_(NULL),
+    edb_(db_path),
     public_tdp_(tdp_pk, 2*std::thread::hardware_concurrency())
 {
-    current_edb_size_ = 10485760; // 10 MiB
-    current_edb_size_ = 1048576; // 1 MiB
-    edb_env_.set_mapsize(current_edb_size_);
+//    current_edb_size_ = 10485760; // 10 MiB
+//    current_edb_size_ = 1048576; // 1 MiB
+//    edb_env_.set_mapsize(current_edb_size_);
 
     // open the environment
-    edb_env_.open(db_path.c_str(), lmdb_env_flags__, lmdb_file_mode__);
+//    edb_env_.open(db_path.c_str(), lmdb_env_flags__, lmdb_file_mode__);
     
     // open the database
-    lmdb::txn txn = new_transaction();
-    edb_dbi_ = lmdb::dbi::open(txn.handle(), NULL, MDB_CREATE);
-    txn.commit();
+//    lmdb::txn txn = new_transaction();
+//    edb_dbi_ = lmdb::dbi::open(txn.handle(), NULL, MDB_CREATE);
+//    txn.commit();
 }
 
 SophosServer::SophosServer(const std::string& db_path, const size_t tm_setup_size, const std::string& tdp_pk) :
-    edb_env_(lmdb::env::create()), edb_dbi_(NULL),
+    edb_(db_path, tm_setup_size, sizeof(update_token_type), sizeof(index_type)),
     public_tdp_(tdp_pk, 2*std::thread::hardware_concurrency())
 {
-    current_edb_size_ = 10485760; // 10 MiB
-    current_edb_size_ = 1048576; // 1 MiB
-    edb_env_.set_mapsize(current_edb_size_);
-    edb_env_.open(db_path.c_str(), lmdb_env_flags__, lmdb_file_mode__);
-
-    // open the database
-    lmdb::txn txn = new_transaction();
-    edb_dbi_ = lmdb::dbi::open(txn.handle(), NULL, MDB_CREATE);
-    txn.commit();
+//    current_edb_size_ = 10485760; // 10 MiB
+//    current_edb_size_ = 1048576; // 1 MiB
+//    edb_env_.set_mapsize(current_edb_size_);
+//    edb_env_.open(db_path.c_str(), lmdb_env_flags__, lmdb_file_mode__);
+//
+//    // open the database
+//    lmdb::txn txn = new_transaction();
+//    edb_dbi_ = lmdb::dbi::open(txn.handle(), NULL, MDB_CREATE);
+//    txn.commit();
 }
 
 SophosServer::~SophosServer()
 {
-    lmdb::dbi_close(edb_env_.handle(), edb_dbi_.handle());
-    edb_env_.close();
+//    lmdb::dbi_close(edb_env_.handle(), edb_dbi_.handle());
+//    edb_env_.close();
 }
     
 const std::string SophosServer::public_key() const
@@ -155,15 +155,15 @@ const std::string SophosServer::public_key() const
     return public_tdp_.public_key();
 }
 
-lmdb::txn SophosServer::new_transaction() const
-{
-    return lmdb::txn::begin(edb_env_.handle(), NULL, 0);
-}
-
-lmdb::txn SophosServer::new_ro_transaction() const
-{
-    return lmdb::txn::begin(edb_env_.handle(), NULL, MDB_RDONLY);
-}
+//lmdb::txn SophosServer::new_transaction() const
+//{
+//    return lmdb::txn::begin(edb_env_.handle(), NULL, 0);
+//}
+//
+//lmdb::txn SophosServer::new_ro_transaction() const
+//{
+//    return lmdb::txn::begin(edb_env_.handle(), NULL, MDB_RDONLY);
+//}
     
 std::list<index_type> SophosServer::search(const SearchRequest& req)
 {
@@ -178,7 +178,8 @@ std::list<index_type> SophosServer::search(const SearchRequest& req)
     logger::log(logger::DBG) << "Derivation key: " << hex_string(req.derivation_key) << std::endl;
 
     // create a new RO transaction
-    lmdb::txn ro_txn = new_ro_transaction();
+//    lmdb::txn ro_txn = new_ro_transaction();
+    auto ro_txn = edb_.ro_transaction();
     
     for (size_t i = 0; i < req.add_count; i++) {
         std::string st_string(reinterpret_cast<char*>(st.data()), st.size());
@@ -187,8 +188,9 @@ std::list<index_type> SophosServer::search(const SearchRequest& req)
 
         logger::log(logger::DBG) << "Derived token: " << hex_string(ut) << std::endl;
 
-        bool found = edb_dbi_.get(ro_txn.handle(), ut, r);
+//        bool found = edb_dbi_.get(ro_txn.handle(), ut, r);
 //        bool found = edb_.get(ut,r);
+        bool found = ro_txn.get(ut, r);
         
         if (found) {
             logger::log(logger::DBG) << "Found: " << std::hex << r << std::endl;
@@ -217,7 +219,8 @@ void SophosServer::search_callback(const SearchRequest& req, std::function<void(
     
     logger::log(logger::DBG) << "Derivation key: " << hex_string(req.derivation_key) << std::endl;
 
-    lmdb::txn ro_txn = new_ro_transaction();
+//    lmdb::txn ro_txn = new_ro_transaction();
+    auto ro_txn = edb_.ro_transaction();
 
     for (size_t i = 0; i < req.add_count; i++) {
         std::string st_string(reinterpret_cast<char*>(st.data()), st.size());
@@ -226,9 +229,10 @@ void SophosServer::search_callback(const SearchRequest& req, std::function<void(
         
         logger::log(logger::DBG) << "Derived token: " << hex_string(ut) << std::endl;
         
-        bool found = edb_dbi_.get(ro_txn.handle(), ut, r);
+//        bool found = edb_dbi_.get(ro_txn.handle(), ut, r);
         //        bool found = edb_.get(ut,r);
-        
+        bool found = ro_txn.get(ut, r);
+
         if (found) {
             logger::log(logger::DBG) << "Found: " << std::hex << r << std::endl;
             
@@ -257,7 +261,8 @@ std::list<index_type> SophosServer::search_parallel_full(const SearchRequest& re
     
     logger::log(logger::DBG) << "Derivation key: " << hex_string(req.derivation_key) << std::endl;
 
-    lmdb::txn ro_txn = new_ro_transaction();
+//    lmdb::txn ro_txn = new_ro_transaction();
+    auto ro_txn = edb_.ro_transaction();
 
     ThreadPool prf_pool(1);
     ThreadPool token_map_pool(1);
@@ -275,9 +280,10 @@ std::list<index_type> SophosServer::search_parallel_full(const SearchRequest& re
         
         logger::log(logger::DBG) << "Derived token: " << hex_string(token) << std::endl;
         
-        bool found = edb_dbi_.get(ro_txn.handle(), token, r);
+//        bool found = edb_dbi_.get(ro_txn.handle(), token, r);
 //        bool found = edb_.get(token,r);
-        
+        bool found = ro_txn.get(token, r);
+
         if (found) {
             logger::log(logger::DBG) << "Found: " << std::hex << r << std::endl;
             
@@ -353,7 +359,8 @@ std::list<index_type> SophosServer::search_parallel(const SearchRequest& req, ui
     
     logger::log(logger::DBG) << "Derivation key: " << hex_string(req.derivation_key) << std::endl;
     
-    lmdb::txn ro_txn = new_ro_transaction();
+//    lmdb::txn ro_txn = new_ro_transaction();
+    auto ro_txn = edb_.ro_transaction();
 
     ThreadPool access_pool(access_threads);
         
@@ -365,9 +372,10 @@ std::list<index_type> SophosServer::search_parallel(const SearchRequest& req, ui
         
         logger::log(logger::DBG) << "Derived token: " << hex_string(token) << std::endl;
         
-        bool found = edb_dbi_.get(ro_txn.handle(), token, r);
+//        bool found = edb_dbi_.get(ro_txn.handle(), token, r);
         //        bool found = edb_.get(token,r);
-        
+        bool found = ro_txn.get(token, r);
+
         if (found) {
             logger::log(logger::DBG) << "Found: " << std::hex << r << std::endl;
 
@@ -438,8 +446,9 @@ std::list<index_type> SophosServer::search_parallel_light(const SearchRequest& r
     
     logger::log(logger::DBG) << "Derivation key: " << hex_string(req.derivation_key) << std::endl;
     
-    lmdb::txn ro_txn = new_ro_transaction();
-    
+//    lmdb::txn ro_txn = new_ro_transaction();
+    auto ro_txn = edb_.ro_transaction();
+
     auto derive_access = [&derivation_prf, &ro_txn, this, &results, &res_mutex](const search_token_type st, size_t i)
     {
         std::string st_string(reinterpret_cast<const char*>(st.data()), st.size());
@@ -449,9 +458,10 @@ std::list<index_type> SophosServer::search_parallel_light(const SearchRequest& r
         
         logger::log(logger::DBG) << "Derived token: " << hex_string(token) << std::endl;
         
-        bool found = edb_dbi_.get(ro_txn.handle(), token, r);
+//        bool found = edb_dbi_.get(ro_txn.handle(), token, r);
         //        bool found = edb_.get(token,r);
-        
+        bool found = ro_txn.get(token, r);
+
         if (found) {
             logger::log(logger::DBG) << "Found: " << std::hex << r << std::endl;
             
@@ -517,8 +527,9 @@ void SophosServer::search_parallel_callback(const SearchRequest& req, std::funct
     
     logger::log(logger::DBG) << "Derivation key: " << hex_string(req.derivation_key) << std::endl;
     
-    lmdb::txn ro_txn = new_ro_transaction();
-    
+//    lmdb::txn ro_txn = new_ro_transaction();
+    auto ro_txn = edb_.ro_transaction();
+
     ThreadPool access_pool(access_thread_count);
     ThreadPool post_pool(post_thread_count);
     
@@ -531,9 +542,10 @@ void SophosServer::search_parallel_callback(const SearchRequest& req, std::funct
         
         logger::log(logger::DBG) << "Derived token: " << hex_string(token) << std::endl;
         
-        bool found = edb_dbi_.get(ro_txn.handle(), token, r);
+//        bool found = edb_dbi_.get(ro_txn.handle(), token, r);
         //        bool found = edb_.get(token,r);
-        
+        bool found = ro_txn.get(token, r);
+
         if (found) {
             logger::log(logger::DBG) << "Found: " << std::hex << r << std::endl;
             
@@ -598,8 +610,9 @@ void SophosServer::search_parallel_light_callback(const SearchRequest& req, std:
     
     logger::log(logger::DBG) << "Derivation key: " << hex_string(req.derivation_key) << std::endl;
 
-    lmdb::txn ro_txn = new_ro_transaction();
- 
+//    lmdb::txn ro_txn = new_ro_transaction();
+    auto ro_txn = edb_.ro_transaction();
+
     
     auto derive_access = [&derivation_prf, &ro_txn, this, &post_callback](const search_token_type st, size_t i)
     {
@@ -610,9 +623,10 @@ void SophosServer::search_parallel_light_callback(const SearchRequest& req, std:
         
         logger::log(logger::DBG) << "Derived token: " << hex_string(token) << std::endl;
         
-        bool found = edb_dbi_.get(ro_txn.handle(), token, r);
+//        bool found = edb_dbi_.get(ro_txn.handle(), token, r);
         //        bool found = edb_.get(token,r);
-        
+        bool found = ro_txn.get(token, r);
+
         if (found) {
             logger::log(logger::DBG) << "Found: " << std::hex << r << std::endl;
             
@@ -668,65 +682,25 @@ void SophosServer::search_parallel_light_callback(const SearchRequest& req, std:
 void SophosServer::update(const UpdateRequest& req)
 {
     logger::log(logger::DBG) << "Update: (" << hex_string(req.token) << ", " << std::hex << req.index << ")" << std::endl;
-
- 
-    lmdb::txn txn = new_transaction();
     
-    int errc;
-    bool success = edb_dbi_.put(txn.handle(), req.token, req.index, 0, &errc);
-    
-    if (!success && errc == MDB_MAP_FULL) {
-        // commit the current transaction
-        txn.commit();
-        
-        // resize
-        resize();
-        
-        // re-run the transaction
-        txn = new_transaction();
-        success = edb_dbi_.put(txn.handle(), req.token, req.index, 0, &errc);
-        
-        if (!success) {
-            logger::log(logger::CRITICAL) << "Unable to replay the transaction" << std::endl;
-        }
-    }
-    errc = txn.commit_nothrow();
-    
-    if(errc != 0){
-        if (errc == MDB_MAP_FULL) {
-            resize();
-            
-            // re-run the transaction
-            txn = new_transaction();
-            success = edb_dbi_.put(txn.handle(), req.token, req.index, 0, &errc);
-            
-            if (!success) {
-                logger::log(logger::CRITICAL) << "Unable to replay the transaction" << std::endl;
-            }
-        }else{
-            logger::log(logger::CRITICAL) << "Unable to insert the token(" << hex_string(req.token) << ", " << std::hex << req.index << ")" << std::endl;
-        }
-    }
-//    edb_.add(req.token, req.index);
+    edb_.put(req.token, req.index);
+    //    edb_.add(req.token, req.index);
 }
 
-void SophosServer::resize()
-{
-    // we need to resize the DB's map
-    logger::log(logger::INFO) << "Resizing the database" << std::endl;
-
-    current_edb_size_ *= (1+edb_size_increase_step__);
-    // set the new size
-    edb_env_.set_mapsize(current_edb_size_);
-
-}
+//void SophosServer::resize()
+//{
+//    // we need to resize the DB's map
+//    logger::log(logger::INFO) << "Resizing the database" << std::endl;
+//
+//    current_edb_size_ *= (1+edb_size_increase_step__);
+//    // set the new size
+//    edb_env_.set_mapsize(current_edb_size_);
+//
+//}
 
 std::ostream& SophosServer::print_stats(std::ostream& out) const
 {
-    lmdb::txn txn = new_ro_transaction();
-    MDB_stat stat = edb_dbi_.stat(txn.handle());
-    txn.commit();
-    out << "Number of tokens: " << stat.ms_entries << std::endl;
+    out << "Number of tokens: " << edb_.entries() << std::endl;
 
     
 //    out << "Number of tokens: " << edb_.size();
