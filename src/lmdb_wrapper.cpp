@@ -128,7 +128,14 @@ namespace sophos {
         }
     }
     
-    
+    LMDBWrapper::~LMDBWrapper()
+    {
+        mdb_dbi_close(env_, dbi_);
+        dbi_ = 0;
+        
+        mdb_env_close(env_);
+        env_ = NULL;
+    }
 
     bool LMDBWrapper::write_metadata(const std::string& md_path) const
     {
@@ -137,10 +144,57 @@ namespace sophos {
             throw std::runtime_error(md_path + ": unable to write the metadata");
         }
         
-        md_out << current_edb_size_;
+        md_out << current_edb_size_ << std::endl;
         md_out.close();
         
         return true;
     }
+    
+    bool LMDBWrapper::put(const MDB_val& key, const MDB_val& val)
+    {
+
+        // create a new transaction
+        MDB_txn *txn;
+        int errc = mdb_txn_begin(env_, NULL, 0, &txn);
+        
+        if (errc != 0) {
+            logger::log(logger::ERROR) << "Unable to begin transaction: " << LMDBWrapper::error_string(errc) << std::endl;
+            
+            return false;
+        }
+
+
+        errc = ::mdb_put(txn, dbi(), const_cast<MDB_val*>(&key), const_cast<MDB_val*>(&val), 0);
+
+        if (errc == MDB_MAP_FULL) {
+            // abort the transaction
+            mdb_txn_abort(txn);
+
+            // resize
+            resize();
+
+            // re-run the transaction
+            int errc = mdb_txn_begin(env_, NULL, 0, &txn);
+            
+            if (errc != 0) {
+                logger::log(logger::ERROR) << "Unable to begin transaction: " << LMDBWrapper::error_string(errc) << std::endl;
+                
+                return false;
+            }
+
+            errc = ::mdb_put(txn, dbi(), const_cast<MDB_val*>(&key), const_cast<MDB_val*>(&val), 0);
+
+            if (errc != 0) {
+                logger::log(logger::CRITICAL) << "Unable to replay the transaction: "  << error_string(errc) << std::endl;
+            }
+        }else{
+            logger::log(logger::ERROR) << "Error when during database put: " << error_string(errc) << std::endl;
+        }
+
+
+        return (errc == MDB_SUCCESS);
+    }
+
+
 }
 }
