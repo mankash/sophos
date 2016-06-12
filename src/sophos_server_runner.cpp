@@ -124,7 +124,7 @@ grpc::Status SophosImpl::setup(grpc::ServerContext* context,
     }
 
     try {
-        logger::log(logger::INFO) << "Seting up with size " << message->setup_size() << std::endl;
+        logger::log(logger::INFO) << "Setting up with size " << message->setup_size() << std::endl;
 //        server_.reset(new SophosServer(pairs_map_path, message->setup_size(), message->public_key()));
         server_.reset(new SophosServer(lmdb_path, message->setup_size(), message->public_key()));
     } catch (std::exception &e) {

@@ -123,6 +123,7 @@ public:
     void search_parallel_light_callback(const SearchRequest& req, std::function<void(index_type)> post_callback, uint8_t thread_count);
 
     void update(const UpdateRequest& req);
+    void resize();
     
     std::ostream& print_stats(std::ostream& out) const;
 private:
@@ -131,6 +132,9 @@ private:
     lmdb::dbi edb_dbi_;
     
     sse::crypto::TdpMultPool public_tdp_;
+    
+    size_t current_edb_size_;
+    static constexpr float edb_size_increase_step__ = 0.2;
 };
 
 } // namespace sophos

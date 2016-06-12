@@ -116,7 +116,10 @@ SophosServer::SophosServer(const std::string& db_path, const std::string& tdp_pk
     edb_env_(lmdb::env::create()), edb_dbi_(NULL),
     public_tdp_(tdp_pk, 2*std::thread::hardware_concurrency())
 {
-    edb_env_.set_mapsize(1UL<<30);
+    current_edb_size_ = 10485760; // 10 MiB
+    current_edb_size_ = 1048576; // 1 MiB
+    edb_env_.set_mapsize(current_edb_size_);
+
     // open the environment
     edb_env_.open(db_path.c_str(), lmdb_env_flags__, lmdb_file_mode__);
     
@@ -130,7 +133,9 @@ SophosServer::SophosServer(const std::string& db_path, const size_t tm_setup_siz
     edb_env_(lmdb::env::create()), edb_dbi_(NULL),
     public_tdp_(tdp_pk, 2*std::thread::hardware_concurrency())
 {
-    edb_env_.set_mapsize(1UL<<30);
+    current_edb_size_ = 10485760; // 10 MiB
+    current_edb_size_ = 1048576; // 1 MiB
+    edb_env_.set_mapsize(current_edb_size_);
     edb_env_.open(db_path.c_str(), lmdb_env_flags__, lmdb_file_mode__);
 
     // open the database
@@ -666,10 +671,54 @@ void SophosServer::update(const UpdateRequest& req)
 
  
     lmdb::txn txn = new_transaction();
-    edb_dbi_.put(txn.handle(), req.token, req.index);
-    txn.commit();
     
+    int errc;
+    bool success = edb_dbi_.put(txn.handle(), req.token, req.index, 0, &errc);
+    
+    if (!success && errc == MDB_MAP_FULL) {
+        // commit the current transaction
+        txn.commit();
+        
+        // resize
+        resize();
+        
+        // re-run the transaction
+        txn = new_transaction();
+        success = edb_dbi_.put(txn.handle(), req.token, req.index, 0, &errc);
+        
+        if (!success) {
+            logger::log(logger::CRITICAL) << "Unable to replay the transaction" << std::endl;
+        }
+    }
+    errc = txn.commit_nothrow();
+    
+    if(errc != 0){
+        if (errc == MDB_MAP_FULL) {
+            resize();
+            
+            // re-run the transaction
+            txn = new_transaction();
+            success = edb_dbi_.put(txn.handle(), req.token, req.index, 0, &errc);
+            
+            if (!success) {
+                logger::log(logger::CRITICAL) << "Unable to replay the transaction" << std::endl;
+            }
+        }else{
+            logger::log(logger::CRITICAL) << "Unable to insert the token(" << hex_string(req.token) << ", " << std::hex << req.index << ")" << std::endl;
+        }
+    }
 //    edb_.add(req.token, req.index);
+}
+
+void SophosServer::resize()
+{
+    // we need to resize the DB's map
+    logger::log(logger::INFO) << "Resizing the database" << std::endl;
+
+    current_edb_size_ *= (1+edb_size_increase_step__);
+    // set the new size
+    edb_env_.set_mapsize(current_edb_size_);
+
 }
 
 std::ostream& SophosServer::print_stats(std::ostream& out) const

@@ -529,6 +529,7 @@ namespace lmdb {
   static inline std::size_t txn_id(MDB_txn* txn) noexcept;
 #endif
   static inline void txn_commit(MDB_txn* txn);
+  static inline int txn_commit_nothrow(MDB_txn* const txn) noexcept;
   static inline void txn_abort(MDB_txn* txn) noexcept;
   static inline void txn_reset(MDB_txn* txn) noexcept;
   static inline void txn_renew(MDB_txn* txn);
@@ -579,6 +580,14 @@ lmdb::txn_commit(MDB_txn* const txn) {
   }
 }
 
+    /**
+     * @see http://symas.com/mdb/doc/group__mdb.html#ga846fbd6f46105617ac9f4d76476f6597
+     */
+    static inline int
+    lmdb::txn_commit_nothrow(MDB_txn* const txn) noexcept {
+        return ::mdb_txn_commit(txn);
+    }
+
 /**
  * @see http://symas.com/mdb/doc/group__mdb.html#ga73a5938ae4c3239ee11efa07eb22b882
  */
@@ -622,7 +631,7 @@ namespace lmdb {
   static inline void dbi_set_relfunc(MDB_txn* txn, MDB_dbi dbi, MDB_rel_func* rel);
   static inline void dbi_set_relctx(MDB_txn* txn, MDB_dbi dbi, void* ctx);
   static inline bool dbi_get(MDB_txn* txn, MDB_dbi dbi, const MDB_val* key, MDB_val* data);
-  static inline bool dbi_put(MDB_txn* txn, MDB_dbi dbi, const MDB_val* key, MDB_val* data, unsigned int flags);
+  static inline bool dbi_put(MDB_txn* txn, MDB_dbi dbi, const MDB_val* key, MDB_val* data, unsigned int flags, int* errc);
   static inline bool dbi_del(MDB_txn* txn, MDB_dbi dbi, const MDB_val* key, const MDB_val* data);
   // TODO: mdb_cmp()
   // TODO: mdb_dcmp()
@@ -776,11 +785,16 @@ lmdb::dbi_put(MDB_txn* const txn,
               const MDB_dbi dbi,
               const MDB_val* const key,
               MDB_val* const data,
-              const unsigned int flags = 0) {
+              const unsigned int flags = 0,
+              int* errc = NULL) {
   const int rc = ::mdb_put(txn, dbi, const_cast<MDB_val*>(key), data, flags);
   if (rc != MDB_SUCCESS && rc != MDB_KEYEXIST) {
     error::raise("mdb_put", rc);
   }
+    
+    if(errc != NULL){
+        *errc = rc;
+    }
   return (rc == MDB_SUCCESS);
 }
 
@@ -1344,6 +1358,18 @@ public:
     _handle = nullptr;
   }
 
+    /**
+     * Commits this transaction without throwing exceptions
+     *
+     * @post `handle() == nullptr`
+     */
+    int commit_nothrow() {
+        int rc = lmdb::txn_commit_nothrow(_handle);
+        _handle = nullptr;
+        
+        return rc;
+    }
+
   /**
    * Aborts this transaction.
    *
@@ -1631,10 +1657,11 @@ public:
   bool put(MDB_txn* const txn,
            const K& key,
            const V& val,
-           const unsigned int flags = default_put_flags) {
+           const unsigned int flags = default_put_flags,
+           int* errc = NULL) {
     const lmdb::val k{&key, sizeof(K)};
     lmdb::val v{&val, sizeof(V)};
-    return lmdb::dbi_put(txn, handle(), k, v, flags);
+    return lmdb::dbi_put(txn, handle(), k, v, flags, errc);
   }
 
   /**
