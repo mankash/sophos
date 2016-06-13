@@ -50,7 +50,6 @@ namespace sophos {
     public:
         LMDBWrapper(const std::string& db_path, const size_t setup_size, const size_t key_size, const size_t data_size);
         LMDBWrapper(const std::string& db_path);
-        ~LMDBWrapper();
         
         class Transaction;
         
