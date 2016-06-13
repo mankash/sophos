@@ -25,9 +25,11 @@
 #define __LMDB_WRAPPER__
 
 #include "logger.hpp"
+#include "utils.hpp"
 
-#include <lmdb.h>      /* for MDB_*, mdb_*() */
+#include "lmdb++.h"
 
+#include <iostream>
 
 #ifdef LMDBXX_DEBUG
 #include <cassert>     /* for assert() */
@@ -52,34 +54,24 @@ namespace sophos {
         
         class Transaction;
         
-        inline Transaction ro_transaction() const;
-        inline Transaction rw_transaction();
-        
-        inline MDB_dbi dbi() const;
-        
+        inline const lmdb::env& env() const;
+        inline lmdb::dbi& dbi();
+        inline const lmdb::dbi& dbi() const;
+
         inline size_t entries() const;
         
         bool resize();
         
-        bool put(const MDB_val& key, const MDB_val& val);
-
-        template<size_t N, typename V>
-        inline bool put(const std::array<uint8_t, N>& key, const V& val);
-
-        template<size_t N_K, size_t N_V>
-        inline bool put(const std::array<uint8_t, N_K>& key, const std::array<uint8_t, N_V>& val);
-
         template<typename K, typename V>
-            inline bool put(const K& key, const V& val);
-        
+        inline bool put(const K& key, const V& data);
         
         inline static std::string error_string(const int errc);
         
     private:
         bool write_metadata(const std::string& md_path) const;
         
-        ::MDB_env *env_;
-        ::MDB_dbi dbi_;
+        lmdb::env env_;
+        lmdb::dbi dbi_;
         
         std::string db_path_;
         
@@ -97,26 +89,18 @@ namespace sophos {
     class LMDBWrapper::Transaction
     {
     public:
-        inline Transaction(const LMDBWrapper* w, MDB_txn *txn);
+        inline Transaction(const LMDBWrapper& w, bool ro);
         inline ~Transaction();
         
         inline void commit();
         inline void abort();
         
-        template<typename V>
-            inline bool get(const MDB_val& key, V& val) const;
-        
         template<typename K, typename V>
-            inline bool get(const K& key, V& val) const;
+            inline bool get(const K& key, V& data) const;
 
-        template<typename V>
-            inline bool get(const std::string& key, V& val) const;
-        
-        template<size_t N, typename V>
-            bool get(const std::array<uint8_t, N>& key, V& val) const;
     private:
         const LMDBWrapper* wrapper_;
-        MDB_txn *txn_;
+        lmdb::txn txn_;
     };
     
     std::string LMDBWrapper::error_string(const int errc)
@@ -124,67 +108,57 @@ namespace sophos {
         return std::string(mdb_strerror(errc));
     }
     
-    MDB_dbi LMDBWrapper::dbi() const
+    inline const lmdb::env& LMDBWrapper::env() const
+    {
+        return env_;
+    }
+    
+    lmdb::dbi& LMDBWrapper::dbi()
     {
         return dbi_;
     }
     
-    LMDBWrapper::Transaction LMDBWrapper::ro_transaction() const
+    const lmdb::dbi& LMDBWrapper::dbi() const
     {
-        MDB_txn *txn;
-        int errc = mdb_txn_begin(env_, NULL, MDB_RDONLY, &txn);
-        
-        if (errc != 0) {
-            logger::log(logger::CRITICAL) << "Unable to begin transaction: " << LMDBWrapper::error_string(errc) << std::endl;
-            
-            return LMDBWrapper::Transaction(this, NULL);
-        }
-
-        return LMDBWrapper::Transaction(this, txn);
-    }
-    
-    LMDBWrapper::Transaction LMDBWrapper::rw_transaction()
-    {
-        MDB_txn *txn;
-        int errc = mdb_txn_begin(env_, NULL, 0, &txn);
-        
-        if (errc != 0) {
-            logger::log(logger::CRITICAL) << "Unable to begin transaction: " << LMDBWrapper::error_string(errc) << std::endl;
-            
-            return LMDBWrapper::Transaction(this, NULL);
-        }
-        
-        return LMDBWrapper::Transaction(this, txn);
+        return dbi_;
     }
     
     template<typename K, typename V>
-    inline bool LMDBWrapper::put(const K& key, const V& val)
+    inline bool LMDBWrapper::put(const K& key, const V& data)
     {
-        MDB_val k{sizeof(K), const_cast<void*>(&key)};
-        MDB_val v{sizeof(V), const_cast<void*>(&val)};
+        // create a new transaction
+        lmdb::txn txn = lmdb::txn::begin(env().handle(), NULL, 0);
         
-        return put(k, v);
-    }
-    
-    template<size_t N, typename V>
-    inline bool LMDBWrapper::put(const std::array<uint8_t, N>& key, const V& val)
-    {
-        MDB_val k{N, const_cast<void*>(reinterpret_cast<const void*>(key.data()))};
-        typename std::remove_const<V>::type val_cpy(val);
-        MDB_val v{sizeof(V), &val_cpy};
+        int errc = 0;
         
-        return put(k, v);
-    }
-    
-    template<size_t N_K, size_t N_V>
-    inline bool LMDBWrapper::put(const std::array<uint8_t, N_K>& key, const std::array<uint8_t, N_V>& val)
-    {
-        MDB_val k{N_K, const_cast<void*>(reinterpret_cast<const void*>(key.data()))};
-        MDB_val v{N_V, const_cast<void*>(reinterpret_cast<const void*>(val.data()))};
+        try {
+            dbi_.put(txn.handle(), key, data, 0, &errc);
+
+            txn.commit();
+            
+        } catch (std::exception &e) {
+            if (errc == MDB_MAP_FULL) {
+                // abort the transaction
+                txn.abort();
+
+                // resize
+                resize();
+                
+                // re-run the transaction
+                txn = lmdb::txn::begin(env().handle(), NULL, 0);
+                
+                dbi_.put(txn.handle(), key, data, 0 , &errc);
+
+            }else if(errc != MDB_SUCCESS){
+                logger::log(logger::ERROR) << "Error during database put: " << error_string(errc) << std::endl;
+            }
+            
+            
+        }
         
-        return put(k, v);
+        return (errc == MDB_SUCCESS);
     }
-    
+
     inline size_t LMDBWrapper::entries() const
     {
         MDB_txn *txn;
@@ -203,71 +177,31 @@ namespace sophos {
         return stat.ms_entries;
     }
 
-    LMDBWrapper::Transaction::Transaction(const LMDBWrapper* w, MDB_txn *txn)
-    : wrapper_(w), txn_(txn)
+    LMDBWrapper::Transaction::Transaction(const LMDBWrapper& w, bool ro)
+    : wrapper_(&w), txn_(lmdb::txn::begin(w.env().handle(), NULL, (ro ? MDB_RDONLY : 0)))
     {
     }
     
     LMDBWrapper::Transaction::~Transaction()
     {
-        if (txn_) {
-            mdb_txn_commit(txn_);
-            txn_ = NULL;
-        }
     }
     
     void LMDBWrapper::Transaction::commit()
     {
-        if (txn_) {
-            mdb_txn_commit(txn_);
-            txn_ = NULL;
-        }
+        txn_.commit();
     }
     
     void LMDBWrapper::Transaction::abort()
     {
-        if (txn_) {
-            mdb_txn_abort(txn_);
-            txn_ = NULL;
-        }
-    }
-
-    template<typename V>
-    bool LMDBWrapper::Transaction::get(const MDB_val& key,
-                                       V& val) const {
-        if (txn_ == NULL) {
-            logger::log(logger::ERROR) << "Invalid transaction" << std::endl;
-            return false;
-        }
-        
-        MDB_val v{};
-        const bool result = mdb_get(txn_, wrapper_->dbi(), const_cast<MDB_val*>(&key), &v);
-        if (result) {
-            val = *reinterpret_cast<const V*>(v.mv_data);
-        }
-        return result;
+        txn_.abort();
     }
     
     template<typename K, typename V>
     bool LMDBWrapper::Transaction::get(const K& key,
-                                       V& val) const {
-        MDB_val k{sizeof(K), const_cast<void*>(&key)};
-        return get(k, val);
+                                       V& data) const {
+        return wrapper_->dbi().get(txn_.handle(), key, data);
     }
 
-    template<size_t N, typename V>
-    bool LMDBWrapper::Transaction::get(const std::array<uint8_t, N>& key,
-                                       V& val) const {
-        MDB_val k{N, const_cast<void*>(reinterpret_cast<const void*>(key.data()))};
-        return get(k, val);
-    }
-
-    template<typename V>
-    bool LMDBWrapper::Transaction::get(const std::string& key,
-                                       V& val) const {
-        MDB_val k{key.length(), const_cast<void*>(reinterpret_cast<const void*>(key.c_str()))};
-        return get(k, val);
-    }
 }
 }
 

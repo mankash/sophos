@@ -179,7 +179,7 @@ std::list<index_type> SophosServer::search(const SearchRequest& req)
 
     // create a new RO transaction
 //    lmdb::txn ro_txn = new_ro_transaction();
-    auto ro_txn = edb_.ro_transaction();
+    LMDBWrapper::Transaction ro_txn(edb_,true);
     
     for (size_t i = 0; i < req.add_count; i++) {
         std::string st_string(reinterpret_cast<char*>(st.data()), st.size());
@@ -220,7 +220,7 @@ void SophosServer::search_callback(const SearchRequest& req, std::function<void(
     logger::log(logger::DBG) << "Derivation key: " << hex_string(req.derivation_key) << std::endl;
 
 //    lmdb::txn ro_txn = new_ro_transaction();
-    auto ro_txn = edb_.ro_transaction();
+    LMDBWrapper::Transaction ro_txn(edb_,true);
 
     for (size_t i = 0; i < req.add_count; i++) {
         std::string st_string(reinterpret_cast<char*>(st.data()), st.size());
@@ -262,7 +262,7 @@ std::list<index_type> SophosServer::search_parallel_full(const SearchRequest& re
     logger::log(logger::DBG) << "Derivation key: " << hex_string(req.derivation_key) << std::endl;
 
 //    lmdb::txn ro_txn = new_ro_transaction();
-    auto ro_txn = edb_.ro_transaction();
+    LMDBWrapper::Transaction ro_txn(edb_,true);
 
     ThreadPool prf_pool(1);
     ThreadPool token_map_pool(1);
@@ -360,7 +360,7 @@ std::list<index_type> SophosServer::search_parallel(const SearchRequest& req, ui
     logger::log(logger::DBG) << "Derivation key: " << hex_string(req.derivation_key) << std::endl;
     
 //    lmdb::txn ro_txn = new_ro_transaction();
-    auto ro_txn = edb_.ro_transaction();
+    LMDBWrapper::Transaction ro_txn(edb_,true);
 
     ThreadPool access_pool(access_threads);
         
@@ -447,7 +447,7 @@ std::list<index_type> SophosServer::search_parallel_light(const SearchRequest& r
     logger::log(logger::DBG) << "Derivation key: " << hex_string(req.derivation_key) << std::endl;
     
 //    lmdb::txn ro_txn = new_ro_transaction();
-    auto ro_txn = edb_.ro_transaction();
+    LMDBWrapper::Transaction ro_txn(edb_,true);
 
     auto derive_access = [&derivation_prf, &ro_txn, this, &results, &res_mutex](const search_token_type st, size_t i)
     {
@@ -472,8 +472,7 @@ std::list<index_type> SophosServer::search_parallel_light(const SearchRequest& r
             res_mutex.unlock();
             
         }else{
-            logger::log(logger::ERROR) << "We were supposed to find a value mapped to key " << hex_string(token);
-            logger::log(logger::ERROR) << " (" << i << "-th derived key from search token " << st_string << ")" << std::endl;
+            logger::log(logger::ERROR) << "We were supposed to find a value mapped to key " << hex_string(token) << " (" << i << "-th derived key from search token " << hex_string(st_string) << ")" << std::endl;
         }
         
     };
@@ -528,7 +527,7 @@ void SophosServer::search_parallel_callback(const SearchRequest& req, std::funct
     logger::log(logger::DBG) << "Derivation key: " << hex_string(req.derivation_key) << std::endl;
     
 //    lmdb::txn ro_txn = new_ro_transaction();
-    auto ro_txn = edb_.ro_transaction();
+    LMDBWrapper::Transaction ro_txn(edb_,true);
 
     ThreadPool access_pool(access_thread_count);
     ThreadPool post_pool(post_thread_count);
@@ -554,8 +553,7 @@ void SophosServer::search_parallel_callback(const SearchRequest& req, std::funct
             post_pool.enqueue(post_callback, v);
             
         }else{
-            logger::log(logger::ERROR) << "We were supposed to find a value mapped to key " << hex_string(token);
-            logger::log(logger::ERROR) << " (" << i << "-th derived key from search token " << st_string << ")" << std::endl;
+            logger::log(logger::ERROR) << "We were supposed to find a value mapped to key " << hex_string(token) << " (" << i << "-th derived key from search token " << hex_string(st_string) << ")" << std::endl;
         }
         
     };
@@ -611,7 +609,7 @@ void SophosServer::search_parallel_light_callback(const SearchRequest& req, std:
     logger::log(logger::DBG) << "Derivation key: " << hex_string(req.derivation_key) << std::endl;
 
 //    lmdb::txn ro_txn = new_ro_transaction();
-    auto ro_txn = edb_.ro_transaction();
+    LMDBWrapper::Transaction ro_txn(edb_,true);
 
     
     auto derive_access = [&derivation_prf, &ro_txn, this, &post_callback](const search_token_type st, size_t i)
@@ -635,8 +633,7 @@ void SophosServer::search_parallel_light_callback(const SearchRequest& req, std:
             post_callback(v);
             
         }else{
-            logger::log(logger::ERROR) << "We were supposed to find a value mapped to key " << hex_string(token);
-            logger::log(logger::ERROR) << " (" << i << "-th derived key from search token " << st_string << ")" << std::endl;
+            logger::log(logger::ERROR) << "We were supposed to find a value mapped to key " << hex_string(token) << " (" << i << "-th derived key from search token " << hex_string(st_string) << ")" << std::endl;
         }
         
     };
