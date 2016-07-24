@@ -116,6 +116,7 @@ public:
 
     void search_parallel_callback(const SearchRequest& req, std::function<void(index_type)> post_callback, uint8_t rsa_thread_count, uint8_t access_thread_count, uint8_t post_thread_count);
     void search_parallel_light_callback(const SearchRequest& req, std::function<void(index_type)> post_callback, uint8_t thread_count);
+    void search_parallel_light_callback(const SearchRequest& req, std::function<void(index_type, uint8_t)> post_callback, uint8_t thread_count);
 
     void update(const UpdateRequest& req);
     

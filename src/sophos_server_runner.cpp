@@ -189,13 +189,28 @@ grpc::Status SophosImpl::sync_search(grpc::ServerContext* context,
 
     logger::log(logger::TRACE) << "Searching ...";
     std::list<uint64_t> res_list;
-    
-//    BENCHMARK_Q((res_list = server_->search(message_to_request(mes))),res_list.size(), PRINT_BENCH_SEARCH_PAR_NORPC)
-//    BENCHMARK_Q((res_list = server_->search_parallel(message_to_request(mes))),res_list.size(), PRINT_BENCH_SEARCH_PAR_NORPC)
-//    BENCHMARK_Q((res_list = server_->search_parallel_light(message_to_request(mes),1)),res_list.size(), PRINT_BENCH_SEARCH_PAR_NORPC)
-    BENCHMARK_Q((res_list = server_->search_parallel(message_to_request(mes),2)),res_list.size(), PRINT_BENCH_SEARCH_PAR_NORPC)
-//    BENCHMARK_Q((res_list = server_->search_parallel_light(message_to_request(mes),3)),res_list.size(), PRINT_BENCH_SEARCH_PAR_NORPC)
-//    BENCHMARK_SIMPLE("\n\n",{;})
+    if (mes->add_count() <= 10) {
+        BENCHMARK_Q((res_list = server_->search_parallel_light(message_to_request(mes),std::thread::hardware_concurrency())),res_list.size(), PRINT_BENCH_SEARCH_PAR_NORPC)
+    }else if (mes->add_count() < 1000){
+//            BENCHMARK_Q((res_list = server_->search(message_to_request(mes))),res_list.size(), PRINT_BENCH_SEARCH_PAR_NORPC)
+//        BENCHMARK_Q((res_list = server_->search_parallel_light(message_to_request(mes),std::thread::hardware_concurrency())),res_list.size(), PRINT_BENCH_SEARCH_PAR_NORPC)
+        BENCHMARK_Q((res_list = server_->search_parallel(message_to_request(mes),2)),res_list.size(), PRINT_BENCH_SEARCH_PAR_NORPC);
+
+    }else if (mes->add_count() >= 1e3 && mes->add_count() < 1e5){
+        BENCHMARK_Q((res_list = server_->search_parallel(message_to_request(mes),2)),res_list.size(), PRINT_BENCH_SEARCH_PAR_NORPC);
+    }else if (mes->add_count() >= 1e5){
+        BENCHMARK_Q((res_list = server_->search_parallel_light(message_to_request(mes),std::thread::hardware_concurrency())),res_list.size(), PRINT_BENCH_SEARCH_PAR_NORPC)
+    }else{
+//            BENCHMARK_Q((res_list = server_->search_parallel_light(message_to_request(mes),std::thread::hardware_concurrency())),res_list.size(), PRINT_BENCH_SEARCH_PAR_NORPC)
+
+                BENCHMARK_Q((res_list = server_->search_parallel(message_to_request(mes),2)),res_list.size(), PRINT_BENCH_SEARCH_PAR_NORPC)
+
+        //    BENCHMARK_Q((res_list = server_->search(message_to_request(mes))),res_list.size(), PRINT_BENCH_SEARCH_PAR_NORPC)
+        //    BENCHMARK_Q((res_list = server_->search_parallel(message_to_request(mes))),res_list.size(), PRINT_BENCH_SEARCH_PAR_NORPC)
+        //    BENCHMARK_Q((res_list = server_->search_parallel_light(message_to_request(mes),1)),res_list.size(), PRINT_BENCH_SEARCH_PAR_NORPC)
+        //    BENCHMARK_SIMPLE("\n\n",{;})
+
+    }
     
     for (auto& i : res_list) {
         sophos::SearchReply reply;
