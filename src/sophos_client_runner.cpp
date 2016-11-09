@@ -219,6 +219,8 @@ void SophosClientRunner::async_update(const std::string& keyword, uint64_t index
         update_in_session(keyword, index);
     }else{
 
+        logger::log(logger::WARNING) << "This is dangerous: you should not use async_updates, they are still buggy..." << std::endl;
+
         message = request_to_message(client_->update_request(keyword, index));
 
         update_tag_type *tag = new update_tag_type();
@@ -354,6 +356,9 @@ bool SophosClientRunner::load_inverted_index(const std::string& path)
         };
         
         parser.addCallbackList(add_list_callback);
+        
+        start_update_session();
+
         parser.parse();
         
         pool.join();
@@ -361,6 +366,8 @@ bool SophosClientRunner::load_inverted_index(const std::string& path)
         
         wait_updates_completion();
         
+        end_update_session();
+
         return true;
     } catch (std::exception& e) {
         logger::log(logger::ERROR) << "\nFailed to load file " << path << " : " << e.what() << std::endl;
