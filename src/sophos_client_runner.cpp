@@ -252,9 +252,15 @@ void SophosClientRunner::async_update(const std::string& keyword, uint64_t index
 
 void SophosClientRunner::wait_updates_completion()
 {
+    logger::log(logger::TRACE) << "Wait for updates completion ..." << std::endl;
+    
     stop_update_completion_thread_ = true;
     std::unique_lock<std::mutex> lock(update_completion_mtx_);
-    update_completion_cv_.wait(lock, [this]{ return update_launched_count_ == update_completed_count_; });
+    update_completion_cv_.wait(lock, [this]{  logger::log(logger::TRACE) << "AWAKEEEEEE!" << std::endl;
+        return update_launched_count_ == update_completed_count_; });
+    
+    logger::log(logger::TRACE) << "Wait for updates completion ... done" << std::endl;
+    
 }
     
 void SophosClientRunner::start_update_session()
@@ -312,7 +318,8 @@ void SophosClientRunner::update_completion_loop()
         {
             std::lock_guard<std::mutex> lock(update_completion_mtx_);
             update_completed_count_++;
-            
+            update_completion_cv_.notify_all();
+
             if (update_launched_count_ == update_completed_count_) {
                 update_completion_cv_.notify_all();
             }
